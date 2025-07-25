@@ -1,1 +1,4 @@
 __version__ = "0.0.1"
+
+AUTH_HEADER = "X-AUTHORIZATION"
+API_KEY_HEADER = "X-API_KEY"
