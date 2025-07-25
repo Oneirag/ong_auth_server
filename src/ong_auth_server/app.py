@@ -7,11 +7,8 @@ from flask import Flask, request, abort
 from flask_ipban import IpBan
 from ong_auth_server.validate_keys import KeyValidator
 from ong_auth_server import AUTH_HEADER, API_KEY_HEADER
-from dotenv import load_dotenv
 
-load_dotenv()
-
-key_validator = KeyValidator()
+key_validator = KeyValidator("~/.config/ongpi/api_keys.db")
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = secrets.token_hex(128)

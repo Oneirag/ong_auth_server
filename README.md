@@ -1,16 +1,7 @@
 # Simple authentication server in flask for nginx
-Uses a list of api keys (defined in a .env file) to validate requests for nginx.
+Uses a list of api keys (defined in a sqlite db at `~/.config/ongpi/api_keys.db`) to validate requests for nginx.
+
 **Important**: nginx parses headers, so don't use `$` in `API-KEY` or `Authorization` headers as nginx will parse it and delete them 
-```
-ONG_AUTH_PORT=5432
-ONG_AUTH_VALID_API_KEY_1=""
-ONG_AUTH_VALID_API_KEY_2=""
-ONG_AUTH_VALID_API_KEY_3=""
-ONG_AUTH_VALID_API_KEY_4=""
-ONG_AUTH_VALID_API_KEY_5=""
-ONG_AUTH_VALID_API_KEY_6=""
-ONG_AUTH_VALID_API_KEY_7=""
-```
 
 ## Nginx configuration
 Define an `auth_request` directive for all locations to protect.
@@ -45,4 +36,15 @@ location /auth_api_key {
 }
 
 }
+```
+
+## Adding users to api_keys.db
+
+Passwords are hashed, so use the following code to add a user:
+```python
+from ong_auth_server.validate_keys import KeyValidator
+# Initialize validator
+validator = KeyValidator()
+# Add some users
+validator.add_user("admin", "secure_password_123")
 ```
