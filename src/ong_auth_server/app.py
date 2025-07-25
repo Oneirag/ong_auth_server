@@ -5,7 +5,7 @@ import eventlet
 from eventlet import wsgi
 from flask import Flask, request, abort
 from flask_ipban import IpBan
-from validate_keys import validate_key
+from ong_auth_server.validate_keys import validate_key
 from dotenv import load_dotenv
 
 load_dotenv()
