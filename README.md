@@ -1,5 +1,6 @@
-# Simple authentication server in flask
+# Simple authentication server in flask for nginx
 Uses a list of api keys (defined in a .env file) to validate requests for nginx.
+**Important**: nginx parses headers, so don't use `$` in `API-KEY` or `Authorization` headers as nginx will parse it and delete them 
 ```
 ONG_AUTH_PORT=5432
 ONG_AUTH_VALID_API_KEY_1=""
