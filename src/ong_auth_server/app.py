@@ -18,6 +18,9 @@ ip_ban = IpBan(app, ip_header="X-Real-IP")
 @app.route('/auth_api_key', methods=['GET', 'POST'])
 def auth_api_key():
     # Obtenemos la clave API válida, bien via API-KEY o como Authorization header
+    remote_ip = request.headers.get('X-Real-IP')
+    remote_uri = request.headers.get("X-Original-Uri")
+    print(f"New request from {remote_ip} to address {remote_uri}")
     authorization = request.headers.get(AUTH_HEADER)
     if authorization and "Bearer " in authorization:
         authorization = authorization.split("Bearer ")[1]
@@ -25,12 +28,14 @@ def auth_api_key():
         authorization = ""
     api_key_header = request.headers.get(API_KEY_HEADER) or authorization
     if not api_key_header:
-        ip_ban.add()
+        if ip_ban.add():
+            print(f"IP {remote_ip} to {remote_uri} banned for using no auth and no authentication")
         return abort(401)
 
     # Verificamos si la clave API es válida en la base de datos
     if not key_validator.validate_key(api_key_header):
-        ip_ban.add()
+        if ip_ban.add():
+            print("IP {remote_ip} to {remote_uri} banned for using invalid credentials")
         return abort(403)
 
     return "", 204
