@@ -21,6 +21,9 @@ def auth_api_key():
     remote_ip = request.headers.get('X-Real-IP')
     remote_uri = request.headers.get("X-Original-Uri")
     print(f"New request from {remote_ip} to address {remote_uri}")
+    if key_validator.is_valid_ip(remote_ip):
+        print(f"IP {remote_ip} is whitelisted, skipping authentication")
+        return "", 204
     authorization = request.headers.get(AUTH_HEADER)
     if authorization and "Bearer " in authorization:
         authorization = authorization.split("Bearer ")[1]

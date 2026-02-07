@@ -92,6 +92,24 @@ class KeyValidator:
                     )
                 """)
 
+                # Create valid IPs table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS valid_ip (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ip_address TEXT NOT NULL UNIQUE,
+                        description TEXT,
+                        is_active INTEGER NOT NULL DEFAULT 1,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
+                # Create index for faster IP lookups
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_ip_active 
+                    ON valid_ip(ip_address, is_active)
+                """)
+
                 conn.commit()
                 self.logger.info(f"Database initialized at {self.db_path}")
 
@@ -400,6 +418,184 @@ class KeyValidator:
             self.logger.error(f"Failed to list users: {e}")
             return []
 
+    def add_valid_ip(self, ip_address: str, description: str = "") -> bool:
+        """
+        Add a valid IP address to the whitelist
+
+        Args:
+            ip_address: IP address to add
+            description: Optional description for the IP
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not ip_address:
+            self.logger.warning("Cannot add IP: ip_address is empty")
+            return False
+
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+
+                # Check if IP already exists
+                cursor.execute("""
+                    SELECT id FROM valid_ip WHERE ip_address = ?
+                """, (ip_address,))
+
+                if cursor.fetchone():
+                    # IP exists, update it to active
+                    cursor.execute("""
+                        UPDATE valid_ip 
+                        SET is_active = 1, updated_at = CURRENT_TIMESTAMP, description = ?
+                        WHERE ip_address = ?
+                    """, (description, ip_address))
+                else:
+                    # Insert new IP
+                    cursor.execute("""
+                        INSERT INTO valid_ip (ip_address, description, is_active)
+                        VALUES (?, ?, 1)
+                    """, (ip_address, description))
+
+                conn.commit()
+                self.logger.info(f"Valid IP '{ip_address}' added successfully")
+                return True
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Failed to add valid IP '{ip_address}': {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Unexpected error adding valid IP '{ip_address}': {e}")
+            return False
+
+    def is_valid_ip(self, ip_address: str) -> bool:
+        """
+        Check if an IP address is in the valid IP whitelist
+
+        Args:
+            ip_address: IP address to validate
+
+        Returns:
+            True if IP is valid/whitelisted, False otherwise
+        """
+        if not ip_address:
+            self.logger.warning("Cannot validate IP: ip_address is empty")
+            return False
+
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    SELECT id FROM valid_ip 
+                    WHERE ip_address = ? AND is_active = 1
+                """, (ip_address,))
+
+                result = cursor.fetchone()
+                return result is not None
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Failed to validate IP '{ip_address}': {e}")
+            return False
+
+    def remove_valid_ip(self, ip_address: str) -> bool:
+        """
+        Remove/deactivate a valid IP address
+
+        Args:
+            ip_address: IP address to remove
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    UPDATE valid_ip 
+                    SET is_active = 0, updated_at = CURRENT_TIMESTAMP 
+                    WHERE ip_address = ? AND is_active = 1
+                """, (ip_address,))
+
+                if cursor.rowcount > 0:
+                    conn.commit()
+                    self.logger.info(f"Valid IP '{ip_address}' removed successfully")
+                    return True
+                else:
+                    self.logger.warning(f"Valid IP '{ip_address}' not found or already inactive")
+                    return False
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Failed to remove valid IP '{ip_address}': {e}")
+            return False
+
+    def list_valid_ips(self, include_inactive: bool = False) -> list:
+        """
+        List all valid IP addresses
+
+        Args:
+            include_inactive: Whether to include inactive IPs
+
+        Returns:
+            List of IP dictionaries
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+
+                if include_inactive:
+                    cursor.execute("""
+                        SELECT ip_address, description, is_active, created_at, updated_at 
+                        FROM valid_ip 
+                        ORDER BY created_at DESC
+                    """)
+                else:
+                    cursor.execute("""
+                        SELECT ip_address, description, is_active, created_at, updated_at 
+                        FROM valid_ip 
+                        WHERE is_active = 1 
+                        ORDER BY created_at DESC
+                    """)
+
+                return [dict(row) for row in cursor.fetchall()]
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Failed to list valid IPs: {e}")
+            return []
+
+        """
+        List all users in the database
+
+        Args:
+            include_inactive: Whether to include inactive users
+
+        Returns:
+            List of user dictionaries
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+
+                if include_inactive:
+                    cursor.execute("""
+                        SELECT username, is_active, created_at, updated_at 
+                        FROM api_users 
+                        ORDER BY created_at DESC
+                    """)
+                else:
+                    cursor.execute("""
+                        SELECT username, is_active, created_at, updated_at 
+                        FROM api_users 
+                        WHERE is_active = 1 
+                        ORDER BY created_at DESC
+                    """)
+
+                return [dict(row) for row in cursor.fetchall()]
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Failed to list users: {e}")
+            return []
+
     def _log_auth_attempt(self, username: Optional[str], success: bool,
                           client_info: Optional[dict] = None) -> None:
         """
@@ -491,13 +687,15 @@ if __name__ == "__main__":
     )
 
     # Initialize validator
-    validator = KeyValidator("auth_keys.db", separator="#")
+    validator = KeyValidator("test_auth_keys.db", separator="#")
 
     # Add some test users
     print("Adding test users...")
     validator.add_user("admin", "secure_password_123")
     validator.add_user("api_user", "another_secure_pass")
     validator.add_user("test_user", "test_password_456")
+
+    validator.add_valid_ip("8.8.8.8", "Google DNS")
 
     # Test API keys
     test_keys = [
@@ -514,11 +712,12 @@ if __name__ == "__main__":
         is_valid = validator.validate_key(key)
         print(f"Key: '{key[:20]}...' - Valid: {is_valid}")
 
-    # List users
-    print("\nActive users:")
-    users = validator.list_users()
-    for user in users:
-        print(f"- {user['username']} (created: {user['created_at']})")
+    # Test IP validation
+    print("\nTesting IP validation:")
+    test_ips = ["8.8.8.8", "192.168.1.1", "10.0.0.1"]
+    for ip in test_ips:
+        is_valid = validator.is_valid_ip(ip)
+        print(f"IP: {ip} - Valid: {is_valid}")
 
     # Get auth stats
     print("\nAuthentication statistics:")
